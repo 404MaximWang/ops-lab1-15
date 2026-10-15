@@ -1,0 +1,72 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ci:                       # the job name is the required status check selected in task 3
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.9'
+
+      # Context values go through env first and are then read as shell variables.
+      # Interpolating ${{ ... }} straight into run: is how command injection gets in,
+      # as soon as the value is attacker-controlled (PR title, branch name).
+      - name: Show build context
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          echo "github.event_name                  = $EVENT_NAME"
+          echo "github.ref                         = $REF"
+          echo "github.sha                         = $SHA"
+          echo "github.event.pull_request.head.sha = $PR_HEAD_SHA"
+
+      # One step per check, so a failure names the check that failed.
+      - name: Check formatting (gofmt)
+        run: make fmt-check
+
+      - name: Static analysis (go vet)
+        run: make vet
+
+      - name: Run tests
+        run: make test
+
+      # Trunk artifacts are produced on main only; PR runs stop after the tests.
+      - name: Package main-branch artifact
+        if: github.event_name == 'push'
+        env:
+          VERSION: 0.0.0-main
+          BUILD_NO: ${{ github.run_number }}
+          RUN_ID: ${{ github.run_id }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          make package VERSION="$VERSION" BUILD_NO="$BUILD_NO" RUN_ID="$RUN_ID" COMMIT="$COMMIT"
+          echo "== binary"
+          sha256sum dist/*/enroll-conflict
+          echo "== artifact"
+          sha256sum dist/*.tar.gz
+          cat dist/*.tar.gz.sha256
+
+      - name: Upload main-branch artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v7
+        with:
+          name: enroll-conflict-main-${{ github.sha }}-${{ github.run_number }}
+          path: |
+            dist/*.tar.gz
+            dist/*.tar.gz.sha256
+          retention-days: 14
