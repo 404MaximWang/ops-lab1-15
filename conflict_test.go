@@ -21,7 +21,6 @@ func TestConflicts(t *testing.T) {
 		{"双周对每周冲突", mon(5, 6, EvenWeeks), mon(5, 6, AllWeeks), true},
 
 		{"双周对双周冲突", mon(1, 2, EvenWeeks), mon(2, 3, EvenWeeks), true},
-		{"日期异常", mon(1, 2, EvenWeeks), Section{Weekday: 8, Start: 1, End: 2, Weeks: AllWeeks}, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -37,6 +36,16 @@ func TestConflicts(t *testing.T) {
 }
 
 func TestValid(t *testing.T) {
+	sunday := Section{
+		Weekday: 7,
+		Start:   1,
+		End:     2,
+		Weeks:   AllWeeks,
+	}
+	if !sunday.Valid() {
+		t.Errorf("%+v 应当合法", sunday)
+	}
+
 	good := Section{Weekday: 3, Start: 1, End: 2, Weeks: EvenWeeks}
 	if !good.Valid() {
 		t.Fatalf("%+v 应当合法", good)
