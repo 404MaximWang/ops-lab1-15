@@ -1,0 +1,70 @@
+name: release
+
+on:
+  push:
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+ # matches v1.0.0-style tags; GitHub filter syntax, not regex
+
+permissions:
+  contents: write # creating a Release needs write access; the ci workflow stays read-only
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history, so the release gate can see origin/main
+
+      # Release gate (L-05 p.12): only commits on main history may be published.
+      # GITHUB_SHA is the commit the tag points at; being an ancestor of
+      # origin/main means it is part of the trunk, not an unmerged branch.
+      - name: Release gate (tag must sit on main history)
+        run: |
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "release gate passed: $GITHUB_SHA is on main history"
+          else
+            echo "release gate failed: tag $GITHUB_REF_NAME points at $GITHUB_SHA," \
+              "which is not on main history; merge the change first" >&2
+            exit 1
+          fi
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.9'
+
+      # Same quality gate as ci, run once more right before publishing.
+      - name: Check formatting (gofmt)
+        run: make fmt-check
+
+      - name: Static analysis (go vet)
+        run: make vet
+
+      - name: Run tests
+        run: make test
+
+      # The release build reruns on the tagged commit instead of reusing the
+      # ci artifact: the version string is baked into the binary at compile
+      # time (discussed in LAB1.md question 3).
+      - name: Package release artifact
+        env:
+          VERSION: ${{ github.ref_name }} # tag v1.0.0, leading v stripped below
+          BUILD_NO: ${{ github.run_number }}
+          RUN_ID: ${{ github.run_id }}
+          COMMIT: ${{ github.sha }}
+        run: |
+          make package VERSION="${VERSION#v}" BUILD_NO="$BUILD_NO" RUN_ID="$RUN_ID" COMMIT="$COMMIT"
+          echo "== binary"
+          sha256sum dist/*/enroll-conflict
+          echo "== artifact"
+          sha256sum dist/*.tar.gz
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }} # per-run temporary token
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/*.tar.gz dist/*.tar.gz.sha256 \
+            --title "$TAG" \
+            --notes "Built from commit $GITHUB_SHA (run $GITHUB_RUN_ID) on ubuntu-24.04 with go1.26.9."
