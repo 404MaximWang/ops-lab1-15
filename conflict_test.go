@@ -36,6 +36,16 @@ func TestConflicts(t *testing.T) {
 }
 
 func TestValid(t *testing.T) {
+	sunday := Section{
+		Weekday: 7,
+		Start:   1,
+		End:     2,
+		Weeks:   AllWeeks,
+	}
+	if !sunday.Valid() {
+		t.Errorf("%+v 应当合法", sunday)
+	}
+
 	good := Section{Weekday: 3, Start: 1, End: 2, Weeks: EvenWeeks}
 	if !good.Valid() {
 		t.Fatalf("%+v 应当合法", good)
