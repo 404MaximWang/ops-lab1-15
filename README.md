@@ -42,4 +42,14 @@ dist/enroll-conflict_1.0.0_linux_amd64/enroll-conflict -version
 | `Dockerfile` | 选做 O1 使用 |
 | `LAB1.md` | 小组的证据与分析记录，需要填写并提交 |
 
-仓库中没有 `.github/workflows/`：流水线由小组在实验中自行编写。
+The workflows in `.github/workflows/` run CI checks for pull requests and `main`, and publish release artifacts for version tags.
+
+## Check a running release
+
+After starting a release binary with `-addr 127.0.0.1:18080`, query its version, commit and build number:
+
+```bash
+curl -fsS http://127.0.0.1:18080/version
+```
+
+Repeat the check after a rollback to confirm that the running service reports the expected version.
