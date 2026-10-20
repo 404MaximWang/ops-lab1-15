@@ -19,6 +19,7 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version: '1.26.9'
+          cache: false
 
       # Context values go through env first and are then read as shell variables.
       # Interpolating ${{ ... }} straight into run: is how command injection gets in,
