@@ -68,3 +68,58 @@ jobs:
           gh release create "$TAG" dist/*.tar.gz dist/*.tar.gz.sha256 \
             --title "$TAG" \
             --notes "Built from commit $GITHUB_SHA (run $GITHUB_RUN_ID) on ubuntu-24.04 with go1.26.9."
+
+  image:
+    name: Build and push container image
+    needs: release
+    runs-on: ubuntu-24.04
+    # A job-level permissions block replaces the workflow-level one instead of merging,
+    # so contents has to be declared again or `gh release download` gets a 403.
+    permissions:
+      contents: read
+      packages: write # pushing container images to ghcr.io
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          gh release download "$TAG" -p "enroll-conflict_${TAG#v}_linux_amd64.tar.gz" -D dist
+
+      - name: Unpack release artifact
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p /tmp/pkg
+          tar -xzf "dist/enroll-conflict_${TAG#v}_linux_amd64.tar.gz" -C /tmp/pkg
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+
+      - name: Build and push container image
+        env:
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          IMAGE_NAME="ghcr.io/$(echo "$REPO" | tr '[:upper:]' '[:lower:]')"
+          VERSION="${TAG#v}"
+          docker build \
+            --platform linux/amd64 \
+            -f Dockerfile \
+            --build-arg VERSION="$VERSION" \
+            --build-arg COMMIT="$COMMIT_SHA" \
+            --build-arg SOURCE="https://github.com/${REPO}" \
+            -t "${IMAGE_NAME}:${VERSION}" \
+            -t "${IMAGE_NAME}:latest" \
+            "/tmp/pkg/enroll-conflict_${VERSION}_linux_amd64"
+          docker push "${IMAGE_NAME}:${VERSION}"
+          docker push "${IMAGE_NAME}:latest"
